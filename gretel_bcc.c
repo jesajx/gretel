@@ -77,9 +77,10 @@ typedef struct {
 typedef struct {
     u32 typ;
     union {
-        lgretel_link_t link;
         lgretel_node_t node;
+        lgretel_link_t link;
     } u;
+    u32 pad;
 } lgretel_logentry_t;
 BPF_PERF_OUTPUT(events);
 
@@ -91,6 +92,7 @@ static void do_gretel_log_node(void *ctx, gretel_t event_id, u32 lineno) {
     logentry.typ = LGRETEL_TYP_NODE;
     logentry.u.node.event_id = event_id;
     logentry.u.node.lineno = lineno;
+    logentry.pad = 123456789;
 
      events.perf_submit(ctx, (char*)&logentry, sizeof(logentry));
 }
@@ -103,8 +105,9 @@ static void gretel_log_link(void *ctx, gretel_t parent_event_id, gretel_t event_
 
     logentry.u.link.parent_event_id = parent_event_id;
     logentry.u.link.event_id = event_id;
+    logentry.pad = 123456789;
 
-     events.perf_submit(ctx, (char*)&logentry, sizeof(logentry));
+    events.perf_submit(ctx, (char*)&logentry, sizeof(logentry));
 }
 
 
@@ -216,16 +219,20 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     if (task) {
 
-        gretel_t request_event = gretel_request_get(pid_tgid);
-        gretel_t sysreceive_event = {};
+        if (GRETEL_PASSTHROUGHMODE) {
 
-        inc_and_get_recvevent(pid_tgid, args->id, &sysreceive_event);
+        } else {
+            gretel_t request_event = gretel_request_get(pid_tgid);
+            gretel_t sysreceive_event = {};
 
-        if (request_event.a != GRETEL_A_ERROR) {
-            gretel_log_link(args, request_event, sysreceive_event);
+            inc_and_get_recvevent(pid_tgid, args->id, &sysreceive_event);
+
+            if (request_event.a != GRETEL_A_ERROR) {
+                gretel_log_link(args, request_event, sysreceive_event);
+            }
+
+            gretel_current_set(pid_tgid, &sysreceive_event);
         }
-
-        gretel_current_set(pid_tgid, &sysreceive_event);
     }
     return 0;
 };

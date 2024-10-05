@@ -75,18 +75,13 @@ class Gretel(ctypes.Structure):
                 ("c", ctype_u64),
                 ("d", ctype_u64)]
 
-    def getpid(self):
-        if self.a == 1:
-            return self.b & 0xFFFFFFFF
-        return None
-
     def to_hard(self):
         res = "-".join(hexpad(x) for x in [self.a, self.b, self.c, self.d])
         return res
 
 
     def to_human_tuple(self):
-        a = GRETEL_A_TYPES.get(self.a, str(self.a))
+        a = GRETEL_A_TYPES.get(self.a, hexpad(self.a))
         return a + "-" + ("-".join(hexpad(x) for x in [self.b, self.c, self.d]))
 
     __str__ = to_human_tuple
@@ -110,7 +105,7 @@ class LGretelNode(ctypes.Structure):
 
 class LGretelLink(ctypes.Structure):
     _fields_ = [("parent_event_id", Gretel),
-                ("event_id", Gretel),]
+                ("event_id", Gretel)]
 
 
     def to_hard(self): # TODO maybe __str__?
@@ -123,9 +118,12 @@ class LGretelUnion(ctypes.Union):
     _fields_ = [("link", LGretelLink),
                 ("node", LGretelNode)]
 
-class LGretelLogEntry(ctypes.Union):
-    _fields_ = [("typ", ctype_u64),
-                ("u", LGretelUnion)]
+class LGretelLogEntry(ctypes.Structure):
+    _fields_ = [
+                ("typ", ctype_u32),
+                ("u", LGretelUnion),
+                ("pad", ctype_u32),
+                ]
 
     def to_hard(self):
         if self.typ == LGRETEL_TYP_NODE:
@@ -151,23 +149,10 @@ with open("gretel_bcc.log", "w") as ff:
         event = ctypes.cast(data, ctypes.POINTER(LGretelLogEntry)).contents
 
         if event.typ == LGRETEL_TYP_NODE:
-            print(event.to_human_tuple())
+            print("node", event.to_human_tuple())
             print(event.to_hard(), file=ff)
         elif event.typ == LGRETEL_TYP_LINK:
-
-            if False:
-                pids = {event.parent_event_id.getpid(), event.event_id.getpid()}
-                pids.discard(None)
-
-                if MY_PID in pids:
-                    return
-                for pid in pids:
-                    cmdline = get_cmdline(pid)
-                    if "sudo" in cmdline or "sshd" in cmdline:
-                        return
-
-
-            print(event.to_human_tuple())
+            print("link", event.to_human_tuple())
             print(event.to_hard(), file=ff)
         else:
             print("bad event") # TODO

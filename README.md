@@ -23,8 +23,8 @@ and wait for it to start up.
 
 To test, use yet another terminal:
 ```bash
-curl localhost/
-curl localhost/api
+curl -H '0000000000000005000000000000000000000000000000000000000000000001' localhost/
+curl -H '0000000000000005000000000000000000000000000000000000000000000002' localhost/api
 ```
 
 
@@ -38,10 +38,12 @@ TODO view resulting graph in Gephi.
 ## TODO
 
 * debug graphs
+    * inode cycles, etc.
 * Instrument a whole website: maybe some python as API server and CrouchDB as db (nginx -> APIserver -> DB).
-* Track more syscalls.
-* Use randomized gretels ebpf just like in nginx, with metadata (location, etc.) logged.
 * fix old code in logparse.py to export to Gephi.
+* allow http gretel-header to not have padding (e.g. 5-0-0-1 instead).
+* Track more kernel internals.
+* clean up nginx gretel node logging (use human readable names instead of linenumbers)
 
 
 Further ahead (maybe):

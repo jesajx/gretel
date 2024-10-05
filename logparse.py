@@ -136,7 +136,7 @@ for path in nginx_log_paths:
                 m = re.search(r"GRETEL NODE ([0-9a-z]+(-[0-9a-z]+){3}) gp=(\d+) pid=(\d+) file=(\S+) lineno=(\d+)", line)
                 if not m:
                     raise ValueError("bad parse", line)
-                name = m.group(1).replace("-", "")
+                name = m.group(1)
                 nodes[name] = {
                     "gp": m.group(3),
                     "pid": m.group(4),
@@ -147,8 +147,8 @@ for path in nginx_log_paths:
                 m = re.search(r"GRETEL LINK ([0-9a-z]+(-[0-9a-z]+){3})->([0-9a-z]+(-[0-9a-z]+){3})", line)
                 if not m:
                     raise ValueError("bad parse", line)
-                pred = m.group(1).replace("-", "")
-                succ = m.group(3).replace("-", "")
+                pred = m.group(1)
+                succ = m.group(3)
                 #print(pred, "->", succ)
 
                 edges.add((pred, succ))
@@ -162,8 +162,8 @@ with open(ebpf_log_path, "r") as f:
         m = re.search("([0-9a-z]+(-[0-9a-z]+){3})->([0-9a-z]+(-[0-9a-z]+){3})", line)
         if not m:
             raise ValueError("bad parse", line)
-        pred = m.group(1).replace("-", "")
-        succ = m.group(3).replace("-", "")
+        pred = m.group(1)
+        succ = m.group(3)
         #print(pred, "->", succ)
 
         edges.add((pred, succ))
@@ -194,12 +194,33 @@ for a,b in edges:
 
 node_attributes = dict()
 
-for n,d in nodes.items():
-    label = n
-    if len(d) != 0:
-        label = f'{n} (gp={d["gp"]} pid={d["pid"]} f={pathlib.Path(d["filename"]).name}:{d["lineno"]})'
-
+for n,node_data in nodes.items():
+    name = n
+    [a,b,c,d] = name.split("-")
+    a = GRETEL_A_TYPES.get(int(a,16), str(a))
+    name = "-".join([a,b,c,d])
+    label = name
+    if len(node_data) != 0:
+        for k in sorted(node_data.keys()):
+            v = node_data[k]
+            if k == "filename":
+                v = pathlib.Path(v).name
+            label += f' {k}={v}'
     node_attributes.setdefault(n, dict())["label"] = label
+
+
+    gp = node_data.get("gp", None)
+    if gp is not None:
+        gp = int(gp)
+    if gp is not None:
+        color = "red"
+        if gp == 1048577:
+            color = "green"
+        elif gp == 1048578:
+            color = "blue"
+
+        node_attributes.setdefault(n, dict())["color"] = color
+
 
 dotfile_put("test.dot", nodes, edges, node_attributes=node_attributes)
 
