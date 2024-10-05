@@ -37,7 +37,7 @@ TODO view resulting graph in Gephi.
 
 ## TODO
 
-* Instrument website: maybe some python as API server and CrouchDB as db (nginx -> APIserver -> DB).
+* Instrument a whole website: maybe some python as API server and CrouchDB as db (nginx -> APIserver -> DB).
 * Track more syscalls.
 * Use randomized gretels ebpf just like in nginx, with metadata (location, etc.) logged.
 * fix old code in logparse.py to export to Gephi.
