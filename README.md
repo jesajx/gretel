@@ -37,7 +37,13 @@ TODO view resulting graph in Gephi.
 
 ## TODO
 
+* debug graphs
 * Instrument a whole website: maybe some python as API server and CrouchDB as db (nginx -> APIserver -> DB).
 * Track more syscalls.
 * Use randomized gretels ebpf just like in nginx, with metadata (location, etc.) logged.
 * fix old code in logparse.py to export to Gephi.
+
+
+Further ahead (maybe):
+* track inodes more permanently (not just those in memory and also across boots)
+* track entire OS (modify kernel instead of using ebpf, modify systemd, bash, etc.)

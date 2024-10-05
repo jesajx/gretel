@@ -8,6 +8,9 @@ import time
 import re
 import bcc
 
+ctype_u64 = ctypes.c_uint64
+ctype_u32 = ctypes.c_uint32
+
 cmdline_cache = dict()
 def get_cmdline(pid):
     if pid not in cmdline_cache:
@@ -66,11 +69,11 @@ def hexpad(x, pad=16):
 
     return res
 
-class BigEventId(ctypes.Structure):
-    _fields_ = [("a", ctypes.c_ulonglong),
-                ("b", ctypes.c_ulonglong),
-                ("c", ctypes.c_ulonglong),
-                ("d", ctypes.c_ulonglong)]
+class Gretel(ctypes.Structure):
+    _fields_ = [("a", ctype_u64),
+                ("b", ctype_u64),
+                ("c", ctype_u64),
+                ("d", ctype_u64)]
 
     def getpid(self):
         if self.a == 1:
@@ -83,60 +86,91 @@ class BigEventId(ctypes.Structure):
 
 
     def to_human_tuple(self):
-        a = self.a
-        b = self.b
-        c = self.c
-        d = self.d
-        if self.a in [SYSCALL_RECV, SYSCALL_SEND]:
-            pid = self.b & 0xFFFFFFFF
-            tgid = self.b >> 32
-            cmdline = get_cmdline(pid)
-            b = {"pid": pid, "cmd": cmdline}
-            if tgid != pid:
-                b["tgid"] = tgid
+        a = GRETEL_A_TYPES.get(self.a, str(self.a))
+        return a + "-" + ("-".join(hexpad(x) for x in [self.b, self.c, self.d]))
 
-            c = SYSCALL_NAME_FROM_NR.get(c, c)
-
-        if a in GRETEL_A_TYPES:
-            a = GRETEL_A_TYPES[self.a]
-
-        return (a, b, c, d)
+    __str__ = to_human_tuple
 
 
-class OutData(ctypes.Structure):
-    _fields_ = [("parent_event_id", BigEventId),
-                ("event_id", BigEventId),]
+LGRETEL_TYP_ERROR = 0
+LGRETEL_TYP_NODE = 1
+LGRETEL_TYP_LINK = 2
 
+
+
+class LGretelNode(ctypes.Structure):
+    _fields_ = [("event_id", Gretel),
+                ("lineno", ctype_u32)]
 
     def to_hard(self):
+        return f'{self.event_id.to_hard()}, gretel_bcc.c:{self.lineno}'
+
+    def to_human_tuple(self):
+        return (self.event_id.to_human_tuple(), self.lineno) # TODO
+
+class LGretelLink(ctypes.Structure):
+    _fields_ = [("parent_event_id", Gretel),
+                ("event_id", Gretel),]
+
+
+    def to_hard(self): # TODO maybe __str__?
         return f'{self.parent_event_id.to_hard()}->{self.event_id.to_hard()}'
 
     def to_human_tuple(self):
         return (self.parent_event_id.to_human_tuple(), self.event_id.to_human_tuple())
+
+class LGretelUnion(ctypes.Union):
+    _fields_ = [("link", LGretelLink),
+                ("node", LGretelNode)]
+
+class LGretelLogEntry(ctypes.Union):
+    _fields_ = [("typ", ctype_u64),
+                ("u", LGretelUnion)]
+
+    def to_hard(self):
+        if self.typ == LGRETEL_TYP_NODE:
+            return self.u.node.to_hard()
+        elif self.typ == LGRETEL_TYP_LINK:
+            return self.u.link.to_hard()
+        else:
+            return f'LGretelLogEntry({self.typ})'
+
+    def to_human_tuple(self):
+        if self.typ == LGRETEL_TYP_NODE:
+            return self.u.node.to_human_tuple()
+        elif self.typ == LGRETEL_TYP_LINK:
+            return self.u.link.to_human_tuple()
+        else:
+            return ('LGretelLogEntry', self.typ)
 
 MY_PID = os.getpid()
 
 
 with open("gretel_bcc.log", "w") as ff:
     def print_event(cpu, data, size):
-        event = ctypes.cast(data, ctypes.POINTER(OutData)).contents
-        #event = b["events"].event(data)
-        #print(f'tsk={event.pid_tgid} err={event.err} nsys={event.nsys} event_type={event.event_type_id}, event_id={event.event_id}')
+        event = ctypes.cast(data, ctypes.POINTER(LGretelLogEntry)).contents
 
-        if False:
-            pids = {event.parent_event_id.getpid(), event.event_id.getpid()}
-            pids.discard(None)
+        if event.typ == LGRETEL_TYP_NODE:
+            print(event.to_human_tuple())
+            print(event.to_hard(), file=ff)
+        elif event.typ == LGRETEL_TYP_LINK:
 
-            if MY_PID in pids:
-                return
-            for pid in pids:
-                cmdline = get_cmdline(pid)
-                if "sudo" in cmdline or "sshd" in cmdline:
+            if False:
+                pids = {event.parent_event_id.getpid(), event.event_id.getpid()}
+                pids.discard(None)
+
+                if MY_PID in pids:
                     return
+                for pid in pids:
+                    cmdline = get_cmdline(pid)
+                    if "sudo" in cmdline or "sshd" in cmdline:
+                        return
 
 
-        print(event.to_human_tuple())
-        print(event.to_hard(), file=ff)
+            print(event.to_human_tuple())
+            print(event.to_hard(), file=ff)
+        else:
+            print("bad event") # TODO
 
     b["events"].open_perf_buffer(print_event) # TODO maybe just queue events in callback
 

@@ -45,56 +45,75 @@ static gretel_t mkgretel(u64 a, u64 b, u64 c, u64 d) {
     return res;
 }
 
-static gretel_t gretel_random() {
-    gretel_t res = {};
-    while (res.a == 0) {
-        res.a = get_random_u64();
-    }
-    res.b = get_random_u64();
-    res.c = get_random_u64();
-    res.d = get_random_u64();
-    return res;
+static u64 gretel_random64() {
+    return (((u64)bpf_get_prandom_u32() << 32) | (u64)bpf_get_prandom_u32());
+}
+
+static gretel_t gretel_random(u64 typ) {
+    return mkgretel(typ, gretel_random64(), gretel_random64(), gretel_random64());
 }
 
 static gretel_t gretel_mkdefault(gretel_t *maybe_gretel) {
-    return (maybe_gretel ? *maybe_gretel : mkgretel(GRETEL_A_ERROR,43,0,0));
+    return (maybe_gretel ? *maybe_gretel : mkgretel(GRETEL_A_ERROR,0,0,0));
 }
 
 #define PR_GRETEL_REQUEST_SET 9998
 #define PR_GRETEL_RESPONSE_SET 9999
 
-struct out_data_t {
+typedef struct {
     gretel_t parent_event_id;
     gretel_t event_id;
-};
+} lgretel_link_t;
+
+typedef struct {
+    gretel_t event_id;
+    u32 lineno;
+    // TODO maybe timestamp, etc.?
+} lgretel_node_t;
+
+#define LGRETEL_TYP_ERROR 0
+#define LGRETEL_TYP_NODE 1
+#define LGRETEL_TYP_LINK 2
+typedef struct {
+    u32 typ;
+    union {
+        lgretel_link_t link;
+        lgretel_node_t node;
+    } u;
+} lgretel_logentry_t;
 BPF_PERF_OUTPUT(events);
 
-// TODO also output metadata for events (e.g. timestamp)
+#define GRETEL_PASSTHROUGHMODE 1    // TODO remove?
 
-#define GRETEL_PASSTHROUGHMODE 1
 
-static void push_data(void *ctx, gretel_t parent_event_id, gretel_t event_id) {
-    struct out_data_t data = {};
+static void do_gretel_log_node(void *ctx, gretel_t event_id, u32 lineno) {
+    lgretel_logentry_t logentry = {};
+    logentry.typ = LGRETEL_TYP_NODE;
+    logentry.u.node.event_id = event_id;
+    logentry.u.node.lineno = lineno;
 
-    //if (GRETEL_PASSTHROUGHMODE
-    //        && (parent_event_id.a == GRETEL_A_ERROR
-    //            || event_id.a == GRETEL_A_ERROR)) {
-    //    return;
-    //}
-
-    data.parent_event_id = parent_event_id;
-    data.event_id = event_id;
-
-    events.perf_submit(ctx, &data, sizeof(data));
+     events.perf_submit(ctx, (char*)&logentry, sizeof(logentry));
 }
 
+#define gretel_log_node(ctx, event_id) do_gretel_log_node(ctx, event_id, __LINE__)
 
-// gretel_pid_syscall_count[pid_tgid] = next_syscall_index_for_pid
-BPF_HASH(gretel_pid_syscall_count, u64, u64);
+static void gretel_log_link(void *ctx, gretel_t parent_event_id, gretel_t event_id) {
+    lgretel_logentry_t logentry = {};
+    logentry.typ = LGRETEL_TYP_LINK;
+
+    logentry.u.link.parent_event_id = parent_event_id;
+    logentry.u.link.event_id = event_id;
+
+     events.perf_submit(ctx, (char*)&logentry, sizeof(logentry));
+}
+
 
 BPF_HASH(gretel_pid_reqgrtls, u64, gretel_t);
 BPF_HASH(gretel_pid_respgrtls, u64, gretel_t);
 BPF_HASH(gretel_pid_curgrtls, u64, gretel_t);
+BPF_HASH(gretel_pid_syscall_count, u64, u64);
+
+
 
 
 struct inode_id {
@@ -120,11 +139,13 @@ static gretel_t inode_gretel_get(struct inode *ino) {
     struct inode_id ii = mkinodeid(ino);
     gretel_t res = gretel_mkdefault(gretel_inode_lastwritegrtl.lookup(&ii));
     if (res.a == GRETEL_A_ERROR) {
-        res = mkgretel(GRETEL_A_BOOT,0,0,0);
+        res = mkgretel(GRETEL_A_BOOT,0,0,0); // TODO try to initialize a
+                                             // common gretel_boot variable so that
+                                             // different boots get different
+                                             // gretels.
     }
     return res;
 }
-
 
 static void inc_recvevent(u64 pid_tgid) {
     gretel_t sysreceive_event = {};
@@ -186,6 +207,10 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 {
     u64 pid_tgid = bpf_get_current_pid_tgid();
 
+
+
+
+
     // NOTE: bpf_get_current_task must be called here and not from a function.
     // I think it is a macro that relies on args.
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -197,7 +222,7 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
         inc_and_get_recvevent(pid_tgid, args->id, &sysreceive_event);
 
         if (request_event.a != GRETEL_A_ERROR) {
-            push_data(args, request_event, sysreceive_event);
+            gretel_log_link(args, request_event, sysreceive_event);
         }
 
         gretel_current_set(pid_tgid, &sysreceive_event);
@@ -214,7 +239,7 @@ TRACEPOINT_PROBE(raw_syscalls, sys_exit)
 
 
     if (current_event.a != GRETEL_A_ERROR && response_event.a != GRETEL_A_ERROR) {
-        push_data(args, current_event, response_event);
+        gretel_log_link(args, current_event, response_event);
     }
 
     return 0;
@@ -241,7 +266,7 @@ static void gretel_current_push(struct pt_regs *ctx, gretel_t event) {
     gretel_t current_event = gretel_current_get(pid_tgid);
 
     if (current_event.a != GRETEL_A_ERROR && event.a != GRETEL_A_ERROR) {
-        push_data(ctx, current_event, event);
+        gretel_log_link(ctx, current_event, event);
     }
 
     gretel_current_set(pid_tgid, &event); // TODO
@@ -255,6 +280,7 @@ static void gretel_do_ino_write(struct pt_regs *ctx, struct inode *ino) {
         gretel_t write_event = mkgretel(GRETEL_A_ERROR, 55, 0, 0);
         inode_gretel_set(ino, &write_event);
     } else {
+        // TODO vs skip intermediate node here and just write cur to inode?
         gretel_t write_event = mkgretel(GRETEL_A_WRITE_INODE, ino->i_rdev, ino->i_ino, 0);
         gretel_current_push(ctx, write_event);
         inode_gretel_set(ino, &write_event);
@@ -269,7 +295,7 @@ static void gretel_do_ino_read(struct pt_regs *ctx, struct inode *ino) {
         gretel_current_push(ctx, read_event);
 
         gretel_t ino_gretel = inode_gretel_get(ino);
-        push_data(ctx, ino_gretel, read_event);
+        gretel_log_link(ctx, ino_gretel, read_event);
     }
 }
 
@@ -331,13 +357,13 @@ int kprobe__sched_fork(struct pt_regs *ctx, unsigned long clone_flags, struct ta
     if (GRETEL_PASSTHROUGHMODE && !gretel_is_enabled_for_current_task(ctx)) {
 
     } else {
-        gretel_t pid_init_req = mkgretel(GRETEL_A_NEW_PID, child_pid_tgid, 0, 0); // TODO vs passthrough?
+        gretel_t pid_init_req = mkgretel(GRETEL_A_NEW_PID, child_pid_tgid, gretel_random64(), gretel_random64()); // TODO vs passthrough?
 
         //gretel_t pid_init_resp = gretel_request_get(parent_pid_tgid);
-        gretel_t pid_init_resp = mkgretel(0, 0, 0, 0);
+        gretel_t pid_init_resp = mkgretel(GRETEL_A_ERROR, 0, 0, 0);
         // TODO maybe delay response until wait()
 
-        push_data(ctx, parent_cur, pid_init_req);
+        gretel_log_link(ctx, parent_cur, pid_init_req);
         gretel_request_set(child_pid_tgid, &pid_init_req);
         gretel_response_set(child_pid_tgid, &pid_init_resp);
     }
@@ -349,7 +375,6 @@ TRACEPOINT_PROBE(sched, sched_process_exit) {
     //struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     //int exit_code = (task->exit_code >> 8);
 
-    gretel_pid_syscall_count.delete(&pid_tgid);
     gretel_pid_reqgrtls.delete(&pid_tgid);
     gretel_pid_respgrtls.delete(&pid_tgid);
     gretel_pid_curgrtls.delete(&pid_tgid);
