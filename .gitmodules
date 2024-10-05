@@ -1,0 +1,3 @@
+[submodule "nginx-gretel"]
+	path = nginx-gretel
+	url = https://github.com/jesajx/nginx-gretel
