@@ -1,3 +1,4 @@
 /gretel_bcc.log
-/nginx1.logs/
-/nginx2.logs/
+/nginx1.logs
+/nginx2.logs
+/*.dot
