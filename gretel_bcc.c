@@ -84,9 +84,6 @@ typedef struct {
 } lgretel_logentry_t;
 BPF_PERF_OUTPUT(events);
 
-#define GRETEL_PASSTHROUGHMODE 1    // TODO remove?
-
-
 static void do_gretel_log_node(void *ctx, gretel_t event_id, u32 lineno) {
     lgretel_logentry_t logentry = {};
     logentry.typ = LGRETEL_TYP_NODE;
@@ -160,7 +157,7 @@ static void inc_recvevent(u64 pid_tgid) {
     }
 }
 
-static void inc_and_get_recvevent(u64 pid_tgid, u64 syscallid, gretel_t *res) {
+static gretel_t inc_and_get_recvevent(u64 pid_tgid, u64 syscallid) {
     gretel_t sysreceive_event = {};
     u64 zero = 0;
     u64 *pnsys = gretel_pid_syscall_count.lookup_or_try_init(&pid_tgid, &zero);
@@ -173,7 +170,7 @@ static void inc_and_get_recvevent(u64 pid_tgid, u64 syscallid, gretel_t *res) {
         sysreceive_event = mkgretel(GRETEL_A_ERROR,47,0,0);
     }
 
-    *res = sysreceive_event;
+    return sysreceive_event;
 }
 
 static void gretel_request_set(u64 pid_tgid, gretel_t *new_gretel) {
@@ -210,30 +207,14 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 {
     u64 pid_tgid = bpf_get_current_pid_tgid();
 
+    gretel_t request_event = gretel_request_get(pid_tgid);
 
-
-
-
-    // NOTE: bpf_get_current_task must be called here and not from a function.
-    // I think it is a macro that relies on args.
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    if (task) {
-
-        if (GRETEL_PASSTHROUGHMODE) {
-
-        } else {
-            gretel_t request_event = gretel_request_get(pid_tgid);
-            gretel_t sysreceive_event = {};
-
-            inc_and_get_recvevent(pid_tgid, args->id, &sysreceive_event);
-
-            if (request_event.a != GRETEL_A_ERROR) {
-                gretel_log_link(args, request_event, sysreceive_event);
-            }
-
-            gretel_current_set(pid_tgid, &sysreceive_event);
-        }
+    if (request_event.a != GRETEL_A_ERROR) {
+        gretel_t sysreceive_event = inc_and_get_recvevent(pid_tgid, args->id);
+        gretel_log_link(args, request_event, sysreceive_event);
+        gretel_current_set(pid_tgid, &sysreceive_event);
     }
+
     return 0;
 };
 
@@ -262,7 +243,7 @@ static int gretel_is_enabled_for_current_task(struct pt_regs *ctx) {
 
 static void gretel_current_push(struct pt_regs *ctx, gretel_t event) {
 
-    if (GRETEL_PASSTHROUGHMODE && !gretel_is_enabled_for_current_task(ctx)) {
+    if (!gretel_is_enabled_for_current_task(ctx)) {
         // if user process did not provide a gretel number, then don't
         // register events that result from it at all.
         return;
@@ -283,22 +264,25 @@ static void gretel_current_push(struct pt_regs *ctx, gretel_t event) {
 
 static void gretel_do_ino_write(struct pt_regs *ctx, struct inode *ino) {
 
-    if (GRETEL_PASSTHROUGHMODE && !gretel_is_enabled_for_current_task(ctx)) {
+    if (!gretel_is_enabled_for_current_task(ctx)) {
         gretel_t write_event = mkgretel(GRETEL_A_ERROR, 55, 0, 0);
         inode_gretel_set(ino, &write_event);
     } else {
         // TODO vs skip intermediate node here and just write cur to inode?
-        gretel_t write_event = mkgretel(GRETEL_A_WRITE_INODE, ino->i_rdev, ino->i_ino, 0);
+        // TODO bad, this needs to be unique per write!
+        gretel_t write_event = gretel_random(GRETEL_A_WRITE_INODE);
+        // TODO maybe log inode ino->i_rdev and ino->i_ino
         gretel_current_push(ctx, write_event);
         inode_gretel_set(ino, &write_event);
     }
 }
 
 static void gretel_do_ino_read(struct pt_regs *ctx, struct inode *ino) {
-    if (GRETEL_PASSTHROUGHMODE && !gretel_is_enabled_for_current_task(ctx)) {
+    if (!gretel_is_enabled_for_current_task(ctx)) {
 
     } else {
-        gretel_t read_event = mkgretel(GRETEL_A_READ_INODE, ino->i_rdev, ino->i_ino, 0);
+        gretel_t read_event = gretel_random(GRETEL_A_READ_INODE);
+        // TODO maybe log inode ino->i_rdev and ino->i_ino
         gretel_current_push(ctx, read_event);
 
         gretel_t ino_gretel = inode_gretel_get(ino);
@@ -361,7 +345,7 @@ int kprobe__sched_fork(struct pt_regs *ctx, unsigned long clone_flags, struct ta
     u64 child_pid_tgid = (((u64)p->tgid << 32) | (u64)p->pid);
 
     gretel_t parent_cur = gretel_current_get(parent_pid_tgid);
-    if (GRETEL_PASSTHROUGHMODE && !gretel_is_enabled_for_current_task(ctx)) {
+    if (!gretel_is_enabled_for_current_task(ctx)) {
 
     } else {
         gretel_t pid_init_req = mkgretel(GRETEL_A_NEW_PID, child_pid_tgid, gretel_random64(), gretel_random64()); // TODO vs passthrough?
