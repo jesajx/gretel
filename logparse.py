@@ -140,6 +140,10 @@ ebpf_log_path = "gretel_bcc.log"
 
 edges = set()
 
+edges.add( # TODO from curl
+('0000000000000005-75f715620f8529bc-735c6476008ca162-227fad7b5e376987', '0000000000000005-0000000000001234-0000000000001234-0000000022221234', )
+)
+
 nodes = dict()
 
 for path in nginx_log_paths:
