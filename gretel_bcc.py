@@ -171,8 +171,9 @@ with open("gretel_bcc.log", "w") as ff:
 
     while 1:
         try:
-            b.perf_buffer_poll(0)
-            time.sleep(0.01)
+            #b.perf_buffer_poll(0)
+            #time.sleep(0.001)
+            b.perf_buffer_poll(500) # millis
             if time.time() - last_flush > 1:
                 ff.flush()
                 last_flush = time.time()

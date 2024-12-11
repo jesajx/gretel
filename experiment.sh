@@ -19,7 +19,7 @@ if (( $# != 1 )) ; then
     die "ERROR: wrong num args"
 fi
 
-date '+%s'
+echo "build_start_time $(date '+%s')"
 gretel_enable=$1
 echo gretel_enable=$gretel_enable
 
@@ -38,7 +38,7 @@ sudo echo got sudo
 if (($gretel_enable)) ; then
     sudo rm -f gretel_bcc.log
 
-    export TIMEFORMAT='bcc %E %U %S'
+    export TIMEFORMAT='bcc %e %U %S'
     time sudo python3 ../gretel_bcc.py &
     bcc_pid=$!
     echo "bcc_pid=$bcc_pid"
@@ -51,8 +51,8 @@ prefix="$(hexpad16 $user_typ)$(hexpad16 $placeholder)$(hexpad16 $placeholder)"
 sudo docker-compose pull # ignore errors
 sudo docker-compose build || die "ERROR in docker-compose build"
 
-mkdir -p nginx{1,2}.logs/
-sudo rm -f nginx{1,2}.logs/*.log
+mkdir -p nginx_{a,b}.logs/
+sudo rm -f nginx_{a,b}.logs/*.log
 
 function get_container_ids() {
   # sets $container_ids
@@ -89,15 +89,20 @@ if (($gretel_enable)) ; then
   done
 fi
 
+#tshark
+
+echo "experiment_start_time $(date '+%s')"
+
 stat_docker
 i=0
 while (( $i < 10000 )) ; do
-    export TIMEFORMAT="curl i=$i %E %U %S"
-    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -o /dev/null
+    export TIMEFORMAT="curl i=$i %R %U %S"
+    #time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -iv -o curl_session_${i}.txt
+    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -iv -o /dev/null
     i=$(($i+1))
 done
 stat_docker
-ls -l nginx{1,2}.logs/
+ls -l nginx_{a,b}.logs/
 
 if (($gretel_enable)) ; then
     ls -l gretel_bcc.log
@@ -106,10 +111,16 @@ if (($gretel_enable)) ; then
     cat "/proc/$bcc_pid/stat"
 fi
 
+echo "experiment_end_time $(date '+%s')"
 
 
 if (($gretel_enable)) ; then
+    export TIMEFORMAT='bcc2 %e %U %S' # TODO necessary?
     kill -SIGINT "$bcc_pid"
 fi
 
 sudo docker-compose down || echo "WARN: error in docker-compose down"
+
+echo "build_end_time $(date '+%s')"
+
+# TODO tshark!!

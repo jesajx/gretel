@@ -131,18 +131,33 @@ def gen_dotfile(node_list, edge_list, graph_attributes=None, node_attributes=Non
 
     yield "}\n"
 
+
+[_,work_dir] = sys.argv
+
+work_dir = pathlib.Path(work_dir)
+
 nginx_log_paths = [
-    "nginx1.logs/error.log",
-    "nginx2.logs/error.log",
+    work_dir/ "nginx_a.logs" / "error.log",
+    work_dir/ "nginx_b.logs" / "error.log",
+    # TODO parse access logs
 ]
-ebpf_log_path = "gretel_bcc.log"
+ebpf_log_path = work_dir / "gretel_bcc.log"
+curl_output_path = work_dir / "curl_output.txt"
 
 
 edges = set()
 
-edges.add( # TODO from curl
-('0000000000000005-75f715620f8529bc-735c6476008ca162-227fad7b5e376987', '0000000000000005-0000000000001234-0000000000001234-0000000022221234', )
-)
+output_placeholder = '0000000000000005-0000000000001234-0000000000001234-0000000022221234'
+
+#edges.add( # TODO from curl
+# ('0000000000000005-3bcaee137d3dcf0b-25328d451631ac61-348f76182dc0643a', '0000000000000005-0000000000001234-0000000000001234-0000000022221234', ),
+#)
+with curl_output_path.open("r") as f:
+    for line in f.read().splitlines():
+        m = re.fullmatch(r'< gretel: ([0-9a-fA-F]{16})([0-9a-fA-F]{16})([0-9a-fA-F]{16})([0-9a-fA-F]{16})', line)
+        if m:
+            [a,b,c,d] = m.groups()
+            edges.add((f'{a}-{b}-{c}-{d}', output_placeholder))
 
 nodes = dict()
 
@@ -271,5 +286,5 @@ for n,node_data in nodes.items():
     node_attributes.setdefault(n, dict())["color"] = color
 
 
-dotfile_put("test.dot", nodes, edges, node_attributes=node_attributes)
+dotfile_put(work_dir / "graph.dot", nodes, edges, node_attributes=node_attributes)
 

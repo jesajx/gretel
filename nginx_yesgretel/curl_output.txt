@@ -1,0 +1,53 @@
+* Host localhost:80 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying [::1]:80...
+* connect to ::1 port 80 from ::1 port 42902 failed: Connection refused
+*   Trying 127.0.0.1:80...
+* Connected to localhost (127.0.0.1) port 80
+> GET /api HTTP/1.1
+> Host: localhost
+> User-Agent: curl/8.8.0
+> Accept: */*
+> gretel: 0000000000000005000000000000123400000000000012340000000022222222
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< Server: nginx/1.27.2
+< Date: Wed, 11 Dec 2024 18:18:13 GMT
+< Content-Type: text/html
+< Content-Length: 167
+< Connection: keep-alive
+< gretel: 00000000000000055cb042a7143ebeeb61d9f89920d6d0db6fc946010f6c4cbb
+< Last-Modified: Thu, 10 Oct 2024 13:44:14 GMT
+< ETag: "6707da2e-a7"
+< Accept-Ranges: bytes
+< 
+{ [167 bytes data]
+100   167  100   167    0     0  61828      0 --:--:-- --:--:-- --:--:-- 83500
+* Connection #0 to host localhost left intact
+HTTP/1.1 200 OK
+Server: nginx/1.27.2
+Date: Wed, 11 Dec 2024 18:18:13 GMT
+Content-Type: text/html
+Content-Length: 167
+Connection: keep-alive
+gretel: 00000000000000055cb042a7143ebeeb61d9f89920d6d0db6fc946010f6c4cbb
+Last-Modified: Thu, 10 Oct 2024 13:44:14 GMT
+ETag: "6707da2e-a7"
+Accept-Ranges: bytes
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>This is an example page</title>
+</head>
+<body>
+<h1>This is an example page</h1>
+<p>
+This is an example page.
+</p>
+</body>
+</html>

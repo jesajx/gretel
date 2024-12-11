@@ -2,17 +2,17 @@
 
 services:
 
-  nginx1:
+  nginx_a:
     image: gretel/nginx-nogretel
-    depends_on: [nginx2]
+    depends_on: [nginx_b]
     ports:
       - "127.0.0.1:80:80"
     volumes:
-      - ./nginx1.conf:/etc/nginx/nginx.conf
-      - ./nginx1.logs:/var/log/nginx/
+      - ./nginx_a.conf:/etc/nginx/nginx.conf
+      - ./nginx_a.logs:/var/log/nginx/
     restart: always
 
-  nginx2:
+  nginx_b:
     image: gretel/nginx-nogretel
     build:
       context: ../nginx-gretel
@@ -21,6 +21,6 @@ services:
     ports:
       - "127.0.0.1:81:81"
     volumes:
-      - ./nginx2.conf:/etc/nginx/nginx.conf
-      - ./nginx2.logs:/var/log/nginx/
+      - ./nginx_b.conf:/etc/nginx/nginx.conf
+      - ./nginx_b.logs:/var/log/nginx/
     restart: always
