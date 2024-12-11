@@ -1,0 +1,31 @@
+---
+
+services:
+
+  nginx1:
+    image: gretel/nginx_yesgretel
+    depends_on: [nginx2]
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx1.conf:/etc/nginx/nginx.conf
+      - ./nginx1.logs:/var/log/nginx/
+
+    environment:
+      GRETEL_PID: 1048577 # =0x100001
+    restart: always
+
+  nginx2:
+    image: gretel/nginx_yesgretel
+    build:
+      context: ../nginx-gretel
+      args:
+        GRETEL_ENABLE: 1
+    ports:
+      - "127.0.0.1:81:81"
+    volumes:
+      - ./nginx2.conf:/etc/nginx/nginx.conf
+      - ./nginx2.logs:/var/log/nginx/
+    environment:
+      GRETEL_PID: 1048578 # =0x100002
+    restart: always

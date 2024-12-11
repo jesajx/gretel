@@ -2,11 +2,16 @@
 
 # eBPF API reference: https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md
 
+import sys
 import ctypes
 import os
 import time
 import re
 import bcc
+import pathlib
+
+
+this_script_dir = pathlib.Path(__file__).parent
 
 ctype_u64 = ctypes.c_uint64
 ctype_u32 = ctypes.c_uint32
@@ -21,7 +26,8 @@ def get_cmdline(pid):
             return ""
     return cmdline_cache[pid]
 
-with open("gretel_bcc.c", "rb") as f:
+c_script_path = this_script_dir / "gretel_bcc.c"
+with c_script_path.open("rb") as f:
     progtext = f.read()
 
 
@@ -106,7 +112,6 @@ class LGretelNode(ctypes.Structure):
 class LGretelLink(ctypes.Structure):
     _fields_ = [("parent_event_id", Gretel),
                 ("event_id", Gretel)]
-
 
     def to_hard(self): # TODO maybe __str__?
         return f'{self.parent_event_id.to_hard()}->{self.event_id.to_hard()}'
