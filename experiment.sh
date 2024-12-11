@@ -19,7 +19,9 @@ if (( $# != 1 )) ; then
     die "ERROR: wrong num args"
 fi
 
+date '+%s'
 gretel_enable=$1
+echo gretel_enable=$gretel_enable
 
 if (($gretel_enable)) ; then
     echo cd nginx_yesgretel
@@ -34,10 +36,12 @@ fi
 sudo echo got sudo
 
 if (($gretel_enable)) ; then
-    rm -f gretel_bcc.log
-    sudo python3 ../gretel_bcc.py &
-    bcc_pid=$!
+    sudo rm -f gretel_bcc.log
 
+    export TIMEFORMAT='bcc %E %U %S'
+    time sudo python3 ../gretel_bcc.py &
+    bcc_pid=$!
+    echo "bcc_pid=$bcc_pid"
 fi
 
 user_typ="5"
@@ -48,37 +52,63 @@ sudo docker-compose pull # ignore errors
 sudo docker-compose build || die "ERROR in docker-compose build"
 
 mkdir -p nginx{1,2}.logs/
-rm -f nginx{1,2}.logs/*.log
+sudo rm -f nginx{1,2}.logs/*.log
+
+function get_container_ids() {
+  # sets $container_ids
+  readarray -t container_ids < <(docker ps --no-trunc | grep gretel | sed -e 's/^\([^ ]*\)[[:space:]].*/\1/')
+}
+
+sudo docker-compose down # just in case
+get_container_ids
+if (( ${#container_ids[@]} != 0 )) ; then
+  die "ERROR: gretel containers are already running"
+fi
 
 sudo docker-compose up --build -d --wait || die "ERROR in docker-compose up"
+get_container_ids
 
-readarray -t containers < <(docker ps --no-trunc | grep gretel | sed -e 's/^\([^ ]*\)[[:space:]].*/\1/')
+if (( ${#container_ids[@]} != 2 )) ; then
+  die "ERROR: failed to start containers"
+fi
 
 function stat_docker() {
-    for container_id in ${containers[@]}; do
-        echo cat /sys/fs/cgroup/system.slice/docker/docker-${container_id}.scope/cpu.stat
-        cat /sys/fs/cgroup/system.slice/docker/docker-${container_id}.scope/cpu.stat
+    for container_id in ${container_ids[@]}; do
+        echo cat /sys/fs/cgroup/system.slice/docker-${container_id}.scope/cpu.stat
+        cat /sys/fs/cgroup/system.slice/docker-${container_id}.scope/cpu.stat
 
-        echo cat /sys/fs/cgroup/system.slice/docker/docker-${container_id}.scope/memory.stat
-        cat /sys/fs/cgroup/system.slice/docker/docker-${container_id}.scope/memory.stat
+        echo cat /sys/fs/cgroup/system.slice/docker-${container_id}.scope/memory.stat
+        cat /sys/fs/cgroup/system.slice/docker-${container_id}.scope/memory.stat
 
     done
 }
 
+if (($gretel_enable)) ; then
+  while [ ! -f gretel_bcc.log ]; do
+      echo "INFO: waiting for bcc to start and create gretel_bcc.log..."
+  done
+fi
 
 stat_docker
 i=0
 while (( $i < 10000 )) ; do
-    time curl -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -o /dev/null
-    echo $i
+    export TIMEFORMAT="curl i=$i %E %U %S"
+    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -o /dev/null
     i=$(($i+1))
 done
 stat_docker
+ls -l nginx{1,2}.logs/
 
 if (($gretel_enable)) ; then
+    ls -l gretel_bcc.log
     # https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html
-    echo cat "/proc/$bcc_pid/stat"
+    echo cat "/proc/$bcc_pid/stat"  
     cat "/proc/$bcc_pid/stat"
+fi
+
+
+
+if (($gretel_enable)) ; then
     kill -SIGINT "$bcc_pid"
 fi
 

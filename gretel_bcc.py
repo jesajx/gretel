@@ -154,13 +154,14 @@ with open("gretel_bcc.log", "w") as ff:
         event = ctypes.cast(data, ctypes.POINTER(LGretelLogEntry)).contents
 
         if event.typ == LGRETEL_TYP_NODE:
-            print("node", event.to_human_tuple())
+            #print("node", event.to_human_tuple())
             print(event.to_hard(), file=ff)
         elif event.typ == LGRETEL_TYP_LINK:
-            print("link", event.to_human_tuple())
+            #print("link", event.to_human_tuple())
             print(event.to_hard(), file=ff)
         else:
-            print("bad event") # TODO
+            #print("bad event") # TODO
+            pass
 
     b["events"].open_perf_buffer(print_event) # TODO maybe just queue events in callback
 
