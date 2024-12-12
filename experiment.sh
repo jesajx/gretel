@@ -98,7 +98,7 @@ i=0
 while (( $i < 10000 )) ; do
     export TIMEFORMAT="curl i=$i %R %U %S"
     #time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -iv -o curl_session_${i}.txt
-    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -iv -o /dev/null
+    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api -o /dev/null
     i=$(($i+1))
 done
 stat_docker
