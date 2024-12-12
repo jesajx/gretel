@@ -205,14 +205,16 @@ static gretel_t gretel_current_get(u64 pid_tgid) {
 
 TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
+    if (0) {
+        u64 pid_tgid = bpf_get_current_pid_tgid();
 
-    gretel_t request_event = gretel_request_get(pid_tgid);
 
-    if (request_event.a != GRETEL_A_ERROR) {
-        gretel_t sysreceive_event = inc_and_get_recvevent(pid_tgid, args->id);
-        gretel_log_link(args, request_event, sysreceive_event);
-        gretel_current_set(pid_tgid, &sysreceive_event);
+        gretel_t request_event = gretel_request_get(pid_tgid);
+        if (request_event.a != GRETEL_A_ERROR) {
+            gretel_t sysreceive_event = inc_and_get_recvevent(pid_tgid, args->id);
+            gretel_log_link(args, request_event, sysreceive_event);
+            gretel_current_set(pid_tgid, &sysreceive_event);
+        }
     }
 
     return 0;
@@ -220,14 +222,16 @@ TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 
 TRACEPOINT_PROBE(raw_syscalls, sys_exit)
 {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
+    if (0) {
+        u64 pid_tgid = bpf_get_current_pid_tgid();
 
-    gretel_t current_event = gretel_current_get(pid_tgid);
-    gretel_t response_event = gretel_response_get(pid_tgid);
+        gretel_t current_event = gretel_current_get(pid_tgid);
+        gretel_t response_event = gretel_response_get(pid_tgid);
 
 
-    if (current_event.a != GRETEL_A_ERROR && response_event.a != GRETEL_A_ERROR) {
-        gretel_log_link(args, current_event, response_event);
+        if (current_event.a != GRETEL_A_ERROR && response_event.a != GRETEL_A_ERROR) {
+            gretel_log_link(args, current_event, response_event);
+        }
     }
 
     return 0;
@@ -268,12 +272,16 @@ static void gretel_do_ino_write(struct pt_regs *ctx, struct inode *ino) {
         gretel_t write_event = mkgretel(GRETEL_A_ERROR, 55, 0, 0);
         inode_gretel_set(ino, &write_event);
     } else {
-        // TODO vs skip intermediate node here and just write cur to inode?
-        // TODO bad, this needs to be unique per write!
-        gretel_t write_event = gretel_random(GRETEL_A_WRITE_INODE);
-        // TODO maybe log inode ino->i_rdev and ino->i_ino
-        gretel_current_push(ctx, write_event);
-        inode_gretel_set(ino, &write_event);
+        if (0) {
+            gretel_t write_event = gretel_random(GRETEL_A_WRITE_INODE);
+            // TODO maybe log inode ino->i_rdev and ino->i_ino
+            gretel_current_push(ctx, write_event);
+            inode_gretel_set(ino, &write_event);
+        } else {
+            u64 pid_tgid = bpf_get_current_pid_tgid();
+            gretel_t current_event = gretel_current_get(pid_tgid);
+            inode_gretel_set(ino, &current_event);
+        }
     }
 }
 
@@ -281,12 +289,19 @@ static void gretel_do_ino_read(struct pt_regs *ctx, struct inode *ino) {
     if (!gretel_is_enabled_for_current_task(ctx)) {
 
     } else {
-        gretel_t read_event = gretel_random(GRETEL_A_READ_INODE);
-        // TODO maybe log inode ino->i_rdev and ino->i_ino
-        gretel_current_push(ctx, read_event);
+        if (0) {
+            gretel_t read_event = gretel_random(GRETEL_A_READ_INODE);
+            // TODO maybe log inode ino->i_rdev and ino->i_ino
+            gretel_current_push(ctx, read_event);
 
-        gretel_t ino_gretel = inode_gretel_get(ino);
-        gretel_log_link(ctx, ino_gretel, read_event);
+            gretel_t ino_gretel = inode_gretel_get(ino);
+            gretel_log_link(ctx, ino_gretel, read_event);
+        } else {
+            u64 pid_tgid = bpf_get_current_pid_tgid();
+            gretel_t ino_gretel = inode_gretel_get(ino);
+            gretel_t response_gretel = gretel_response_get(pid_tgid);
+            gretel_log_link(ctx, ino_gretel, response_gretel);
+        }
     }
 }
 
