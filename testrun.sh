@@ -15,7 +15,7 @@ curl -vi -H "gretel: ${prefix}$(hexpad16 0x22222222)" localhost/api 2>&1 | tee n
 #curl -H "gretel: ${prefix}$(hexpad16 0x55555555)" localhost/api
 
 #i=0
-#while (( $i < 10)) ; do
+#while (( $i < 10000)) ; do
 #    echo curl $i
 #    time curl --no-progress-meter -H "gretel: ${prefix}$(hexpad16 $i)" localhost/api  -o /dev/null
 #    i=$(($i+1))
